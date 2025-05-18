@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Notificaciones FCM</title>
+  <!-- Fuentes e iconos -->
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+  <!-- Estilos personalizados -->
+  <link rel="stylesheet" href="index.css">
+</head>
+<body>
+  <div class="wrapper">
+    <div class="left">
+      <h1><i class="fa-solid fa-paper-plane"></i> Enviar Notificación</h1>
+      <form id="fcmForm">
+        <label for="token"><i class="fa-solid fa-mobile-screen-button"></i> Token del dispositivo</label>
+        <textarea id="token" rows="4" required></textarea>
+
+        <label for="title"><i class="fa-solid fa-heading"></i> Título</label>
+        <input type="text" id="title" required>
+
+        <label for="body"><i class="fa-solid fa-message"></i> Mensaje</label>
+        <input type="text" id="body" required>
+
+        <button type="submit" id="submitBtn">
+          <i class="fa-solid fa-paper-plane"></i> Enviar
+        </button>
+      </form>
+      <div id="result"></div>
+    </div>
+
+    <div class="right">
+      <div class="historial-header">
+        <h2><i class="fa-solid fa-clock-rotate-left"></i> Historial</h2>
+        <button class="borrar" onclick="borrarHistorial()">
+          <i class="fa-solid fa-trash"></i> Borrar
+        </button>
+      </div>
+
+      <div class="filters">
+        <input type="text" id="searchInput" placeholder="Buscar por título o mensaje">
+        <div class="radio-group">
+          <label><input type="radio" name="filter" value="all" checked> Todas</label>
+          <label><input type="radio" name="filter" value="success"> Enviadas</label>
+          <label><input type="radio" name="filter" value="error"> Fallidas</label>
+        </div>
+      </div>
+
+      <div class="historial-body" id="historyList"></div>
+    </div>
+  </div>
+
+  <script>
+    const form = document.getElementById('fcmForm');
+const resultDiv = document.getElementById('result');
+const submitBtn = document.getElementById('submitBtn');
+const historyList = document.getElementById('historyList');
+const searchInput = document.getElementById('searchInput');
+const radios = document.querySelectorAll('input[name="filter"]');
+
+function guardarEnHistorial(titulo, mensaje, estado) {
+  const historial = JSON.parse(localStorage.getItem('notificaciones')) || [];
+  const ahora = new Date().toLocaleString();
+  historial.unshift({ titulo, mensaje, estado, hora: ahora });
+  localStorage.setItem('notificaciones', JSON.stringify(historial));
+  mostrarHistorial();
+}
+
+function mostrarHistorial() {
+  const historial = JSON.parse(localStorage.getItem('notificaciones')) || [];
+  const filtro = document.querySelector('input[name="filter"]:checked').value;
+  const busqueda = searchInput.value.toLowerCase();
+  historyList.innerHTML = '';
+
+  historial
+    .filter(item =>
+      (filtro === 'all' || item.estado === filtro) &&
+      (item.titulo.toLowerCase().includes(busqueda) || item.mensaje.toLowerCase().includes(busqueda))
+    )
+    .forEach(item => {
+      const div = document.createElement('div');
+      div.classList.add('item');
+      // Agregar la clase 'error' si el estado es 'error'
+      if (item.estado === 'error') {
+        div.classList.add('fallida');
+      }
+
+      // Icono según estado
+      const icono = item.estado === 'success'
+        ? '<i class="fa-solid fa-check-circle" style="color:#2e7d32;"></i>'
+        : '<i class="fa-solid fa-times-circle" style="color:#c62828;"></i>';
+
+      div.innerHTML = `
+        <p><strong>${icono} ${item.titulo}</strong></p>
+        <p>${item.mensaje}</p>
+        <p class="hora">${item.hora} - ${item.estado === 'success' ? 'Enviada' : 'Fallida'}</p>
+      `;
+      historyList.appendChild(div);
+    });
+}
+
+function borrarHistorial() {
+  localStorage.removeItem('notificaciones');
+  mostrarHistorial();
+}
+
+form.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const token = document.getElementById('token').value;
+  const title = document.getElementById('title').value;
+  const body = document.getElementById('body').value;
+
+  submitBtn.disabled = true;
+  resultDiv.innerHTML = "";
+
+  try {
+    const response = await fetch('http://localhost:3000/send', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token, title, body })
+    });
+
+    const result = await response.json();
+
+    if (result.success) {
+      resultDiv.innerHTML = `<div class="success"><i class="fa-solid fa-check-circle"></i> Notificación enviada correctamente.</div>`;
+      guardarEnHistorial(title, body, 'success');
+    } else {
+      resultDiv.innerHTML = `<div class="error"><i class="fa-solid fa-times-circle"></i> Error al enviar la notificación.</div>`;
+      guardarEnHistorial(title, body, 'error');
+    }
+  } catch (error) {
+    resultDiv.innerHTML = `<div class="error"><i class="fa-solid fa-wifi-slash"></i> Fallo de red o del servidor.</div>`;
+    guardarEnHistorial(title, body, 'error');
+  } finally {
+    submitBtn.disabled = false;
+  }
+});
+
+radios.forEach(r => r.addEventListener('change', mostrarHistorial));
+searchInput.addEventListener('input', mostrarHistorial);
+
+mostrarHistorial();
+
+  </script>
+</body>
+</html>
